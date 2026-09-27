@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens — "Modern Israeli Lifestyle Store".
+ * Warm, light, homely; coral for action, teal for trust/info, sunshine for deals.
+ * All text/background pairs meet WCAG AA.
+ */
+@theme {
+  --font-sans: var(--font-heebo), "Arial Hebrew", Arial, sans-serif;
+
+  --color-canvas: #fffbf5;        /* page background */
+  --color-surface: #ffffff;       /* cards */
+  --color-blush: #fbe9e2;         /* soft section background */
+  --color-sand: #f5ede1;          /* muted surfaces */
+  --color-line: #e9dfd2;          /* borders */
+  --color-ink: #2b2a33;           /* primary text */
+  --color-ink-soft: #5d5a66;      /* secondary text (AA on canvas) */
+
+  --color-brand: #c4452f;         /* coral CTA (AA with white text) */
+  --color-brand-hover: #a63a27;
+  --color-brand-soft: #fde2db;
+
+  --color-teal: #1f6f69;          /* links / info */
+  --color-teal-soft: #dcefeb;
+
+  --color-sun: #f4b942;           /* sale highlight (use dark text) */
+  --color-sun-soft: #fdf1d4;
+
+  --color-success: #276b43;
+  --color-success-soft: #e0f2e7;
+  --color-warning: #9a5b00;
+  --color-warning-soft: #fdefd6;
+  --color-danger: #b42318;
+  --color-danger-soft: #fde4e1;
+
+  --radius-card: 1rem;
+  --shadow-card: 0 1px 2px rgb(43 42 51 / 0.06), 0 4px 16px rgb(43 42 51 / 0.05);
+  --shadow-pop: 0 8px 32px rgb(43 42 51 / 0.14);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-teal);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  h1, h2, h3 { line-height: 1.25; font-weight: 700; }
+  dialog::backdrop { background: rgb(43 42 51 / 0.45); }
+  /* Numbers (prices, SKUs, phones) inside RTL text */
+  .ltr-nums { direction: ltr; unicode-bidi: isolate; }
+}
+
+@layer components {
+  .container-page { width: 100%; max-width: 80rem; margin-inline: auto; padding-inline: 1rem; }
+  @media (min-width: 768px) { .container-page { padding-inline: 1.5rem; } }
+  .prose-content h2 { font-size: 1.25rem; margin-top: 1.75rem; margin-bottom: 0.5rem; }
+  .prose-content p { margin-bottom: 0.9rem; }
+  .prose-content ul { list-style: disc; padding-inline-start: 1.25rem; margin-bottom: 0.9rem; }
+}

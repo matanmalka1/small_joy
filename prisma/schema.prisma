@@ -1,0 +1,578 @@
+// Data model for "שמחות קטנות".
+// Money is always stored as integer agorot (1 ILS = 100 agorot). Never floats.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────── Auth (Better Auth tables) ─────────────────────────
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  role          Role      @default(CUSTOMER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+
+  profile   CustomerProfile?
+  addresses Address[]
+  carts     Cart[]
+  orders    Order[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+/// Shared by Better Auth (auth endpoints) and the app limiter (keys prefixed "app:").
+model RateLimit {
+  id          String @id @default(cuid())
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+
+  @@map("rate_limit")
+}
+
+// ───────────────────────────── Customers ─────────────────────────────
+
+model CustomerProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone           String?
+  marketingOptIn  Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Address {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label       String?
+  fullName    String
+  phone       String
+  city        String
+  street      String
+  houseNumber String
+  apartment   String?
+  floor       String?
+  zip         String?
+  notes       String?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ───────────────────────────── Catalog ─────────────────────────────
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+/// Drives which variant attributes the admin form suggests.
+enum ProductKind {
+  GENERAL
+  BEDDING
+  DISPOSABLE
+  HOUSEWARE
+}
+
+model Category {
+  id          String            @id @default(cuid())
+  slug        String            @unique
+  name        String
+  description String?
+  imageUrl    String?
+  parentId    String?
+  parent      Category?         @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Category[]        @relation("CategoryTree")
+  sortOrder   Int               @default(0)
+  isActive    Boolean           @default(true)
+  isDemo      Boolean           @default(false)
+  products    ProductCategory[]
+  promotions  Promotion[]
+  coupons     CouponCategory[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([parentId, sortOrder])
+}
+
+model Product {
+  id             String            @id @default(cuid())
+  slug           String            @unique
+  name           String
+  description    String            @default("")
+  kind           ProductKind       @default(GENERAL)
+  status         ProductStatus     @default(DRAFT)
+  isFeatured     Boolean           @default(false)
+  isDemo         Boolean           @default(false)
+  seoTitle       String?
+  seoDescription String?
+  /// Denormalized lowest active variant price (agorot, before promotions) for sorting/filtering.
+  priceFrom      Int               @default(0)
+  variants       ProductVariant[]
+  images         ProductImage[]
+  categories     ProductCategory[]
+  promotions     Promotion[]
+  coupons        CouponProduct[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([status, createdAt])
+  @@index([isFeatured])
+  @@index([priceFrom])
+}
+
+/// Every product has at least one variant. Stock lives here.
+model ProductVariant {
+  id                String              @id @default(cuid())
+  productId         String
+  product           Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku               String              @unique
+  /// e.g. {"מידה":"זוגי","צבע":"לבן","סוג בד":"כותנה"}
+  options           Json                @default("{}")
+  /// Regular price in agorot.
+  price             Int
+  /// Optional sale price in agorot (must be < price).
+  salePrice         Int?
+  stockQuantity     Int                 @default(0)
+  lowStockThreshold Int                 @default(5)
+  isDefault         Boolean             @default(false)
+  isActive          Boolean             @default(true)
+  sortOrder         Int                 @default(0)
+  cartItems         CartItem[]
+  orderItems        OrderItem[]
+  movements         InventoryMovement[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([productId, sortOrder])
+}
+
+model ProductImage {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url        String
+  /// Key in object storage; null for bundled demo images.
+  storageKey String?
+  alt        String   @default("")
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([productId, sortOrder])
+}
+
+model ProductCategory {
+  productId  String
+  categoryId String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([productId, categoryId])
+  @@index([categoryId])
+}
+
+// ───────────────────────────── Inventory ─────────────────────────────
+
+enum InventoryReason {
+  INITIAL
+  SALE
+  CANCEL_RESTOCK
+  REFUND_RESTOCK
+  ADJUSTMENT
+  IMPORT
+}
+
+model InventoryMovement {
+  id        String          @id @default(cuid())
+  variantId String
+  variant   ProductVariant  @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  delta     Int
+  reason    InventoryReason
+  orderId   String?
+  note      String?
+  actorId   String?
+  createdAt DateTime        @default(now())
+
+  @@index([variantId, createdAt])
+  @@index([orderId])
+}
+
+// ───────────────────────────── Cart ─────────────────────────────
+
+model Cart {
+  id         String     @id @default(cuid())
+  /// Random token stored in an httpOnly cookie (guest carts).
+  token      String     @unique
+  userId     String?
+  user       User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  couponCode String?
+  items      CartItem[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([userId])
+}
+
+model CartItem {
+  id        String         @id @default(cuid())
+  cartId    String
+  cart      Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  quantity  Int
+  createdAt DateTime       @default(now())
+
+  @@unique([cartId, variantId])
+}
+
+// ───────────────────────────── Orders & payments ─────────────────────────────
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PROCESSING
+  READY_FOR_PICKUP
+  SHIPPED
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum FulfillmentType {
+  PICKUP
+  DELIVERY
+}
+
+model Order {
+  id               String          @id @default(cuid())
+  /// Human-facing sequential number.
+  number           Int             @unique @default(autoincrement())
+  userId           String?
+  user             User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// Unguessable token allowing guests to view their own order.
+  accessToken      String          @unique
+  /// Cart that produced the order; used to reuse a pending order on double submit.
+  cartId           String?
+  email            String
+  customerName     String
+  phone            String
+  fulfillment      FulfillmentType
+  /// Snapshot of the delivery address (null for pickup).
+  shippingAddress  Json?
+  shippingMethodId String?
+  shippingName     String
+  subtotal         Int
+  discountTotal    Int             @default(0)
+  shippingTotal    Int             @default(0)
+  total            Int
+  couponCode       String?
+  status           OrderStatus     @default(PENDING_PAYMENT)
+  paymentStatus    PaymentStatus   @default(PENDING)
+  customerNotes    String?
+  adminNotes       String?
+  /// Set once stock was decremented (on confirmed payment). Guards double decrement.
+  stockCommittedAt DateTime?
+  /// Set once stock was returned (cancel/refund). Guards double restock.
+  stockReleasedAt  DateTime?
+  /// Payment confirmed but stock was insufficient; needs manual handling.
+  needsAttention   Boolean         @default(false)
+  paidAt           DateTime?
+  cancelledAt      DateTime?
+  items            OrderItem[]
+  payments         Payment[]
+  redemption       CouponRedemption?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([status, createdAt])
+  @@index([paymentStatus])
+  @@index([userId, createdAt])
+  @@index([email])
+  @@index([cartId, status])
+}
+
+/// Immutable snapshot of what was bought.
+model OrderItem {
+  id           String          @id @default(cuid())
+  orderId      String
+  order        Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variantId    String?
+  variant      ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  productId    String?
+  productName  String
+  variantLabel String          @default("")
+  sku          String
+  /// Unit price actually charged before order-level coupon (agorot).
+  unitPrice    Int
+  /// Unit list price before any sale (agorot), for display.
+  listPrice    Int
+  quantity     Int
+  lineTotal    Int
+  imageUrl     String?
+
+  @@index([orderId])
+  @@index([variantId])
+}
+
+enum PaymentAttemptStatus {
+  CREATED
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+model Payment {
+  id                    String               @id @default(cuid())
+  orderId               String
+  order                 Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider              String
+  /// Stable per attempt; sent to the provider to prevent duplicate charges.
+  idempotencyKey        String               @unique
+  providerSessionId     String?
+  providerTransactionId String?              @unique
+  amount                Int
+  refundedAmount        Int                  @default(0)
+  status                PaymentAttemptStatus @default(CREATED)
+  failureReason         String?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  events                PaymentEvent[]
+
+  @@index([orderId])
+}
+
+/// Every processed webhook event. The unique constraint makes processing idempotent.
+model PaymentEvent {
+  id          String   @id @default(cuid())
+  provider    String
+  eventId     String
+  type        String
+  paymentId   String?
+  payment     Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  processedAt DateTime @default(now())
+
+  @@unique([provider, eventId])
+}
+
+// ───────────────────────────── Discounts ─────────────────────────────
+
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+enum CouponScope {
+  ALL
+  PRODUCTS
+  CATEGORIES
+}
+
+model Coupon {
+  id                 String             @id @default(cuid())
+  code               String             @unique
+  description        String?
+  type               DiscountType
+  /// Percent (1-100) or fixed amount in agorot.
+  value              Int
+  scope              CouponScope        @default(ALL)
+  startsAt           DateTime?
+  endsAt             DateTime?
+  minOrderTotal      Int                @default(0)
+  maxRedemptions     Int?
+  perCustomerLimit   Int?
+  /// If false, the coupon only applies to items not already on sale.
+  combineWithSales   Boolean            @default(false)
+  isActive           Boolean            @default(true)
+  isDemo             Boolean            @default(false)
+  products           CouponProduct[]
+  categories         CouponCategory[]
+  redemptions        CouponRedemption[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+}
+
+model CouponProduct {
+  couponId  String
+  productId String
+  coupon    Coupon  @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([couponId, productId])
+}
+
+model CouponCategory {
+  couponId   String
+  categoryId String
+  coupon     Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([couponId, categoryId])
+}
+
+model CouponRedemption {
+  id        String   @id @default(cuid())
+  couponId  String
+  coupon    Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  orderId   String   @unique
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  email     String
+  userId    String?
+  amount    Int
+  createdAt DateTime @default(now())
+
+  @@index([couponId])
+  @@index([email])
+}
+
+/// Automatic sale on a product or a whole category (no code required).
+model Promotion {
+  id         String       @id @default(cuid())
+  name       String
+  type       DiscountType
+  value      Int
+  productId  String?
+  product    Product?     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  categoryId String?
+  category   Category?    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  startsAt   DateTime?
+  endsAt     DateTime?
+  isActive   Boolean      @default(true)
+  isDemo     Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}
+
+// ───────────────────────────── Shipping & settings ─────────────────────────────
+
+model ShippingMethod {
+  id                    String          @id @default(cuid())
+  name                  String
+  description           String?
+  type                  FulfillmentType
+  /// Price in agorot. Null = not configured yet (method cannot be used).
+  price                 Int?
+  /// Order subtotal (after discounts) from which shipping is free. Null = never free.
+  freeShippingThreshold Int?
+  /// Cities served. Empty = all of Israel.
+  zones                 String[]        @default([])
+  etaText               String?
+  isActive              Boolean         @default(false)
+  sortOrder             Int             @default(0)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+}
+
+/// Singleton row (id = "store").
+model StoreSettings {
+  id                String   @id @default("store")
+  storeName         String   @default("שמחות קטנות")
+  addressLine       String   @default("פנחס לבון 18, נתניה")
+  phone             String?
+  email             String?
+  whatsapp          String?
+  openingHours      String?
+  pickupInstructions String?
+  businessId        String?
+  lowStockDefault   Int      @default(5)
+  announcement      String?
+  updatedAt         DateTime @updatedAt
+}
+
+model ContentPage {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  title     String
+  /// Plain text with blank-line separated paragraphs and "## " headings.
+  body      String
+  /// Draft pages show a visible "טיוטה" banner and are excluded from the sitemap.
+  isDraft   Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  message   String
+  isHandled Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
