@@ -5,7 +5,7 @@ import { cartLineSchema, couponSchema } from "@/lib/validation/cart";
 import { rateLimitByIp } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import type { ActionResult } from "@/lib/action-result";
-import { addToCart, CartError, removeFromCart, setCartCoupon, setCartQuantity } from "@/server/cart/cart";
+import { addToCart, buildCartView, CartError, removeFromCart, setCartCoupon, setCartQuantity } from "@/server/cart/cart";
 import { ensureCurrentCart, currentCartIdentity, getCurrentCart } from "@/server/cart/session";
 import { loadCoupon, normalizeCouponCode } from "@/server/pricing/loaders";
 import { couponErrorMessages, validateCouponWindow } from "@/server/pricing/engine";
@@ -69,6 +69,12 @@ export async function applyCouponAction(input: { code: string }): Promise<Action
     const err = validateCouponWindow(coupon.rule, coupon.usage, new Date());
     if (err) return { ok: false, error: couponErrorMessages[err] };
     await setCartCoupon(cart.id, normalizeCouponCode(parsed.data.code));
+    // Reject immediately if it does not apply to this cart (min total, scope, sale items).
+    const view = await buildCartView(cart.id, { email: identity.email, userId: identity.userId });
+    if (view.pricing.couponError) {
+      await setCartCoupon(cart.id, null);
+      return { ok: false, error: couponErrorMessages[view.pricing.couponError] };
+    }
     revalidatePath("/", "layout");
     return { ok: true, message: "הקופון נקלט" };
   } catch (e) {
