@@ -1,14 +1,11 @@
 /** All money is integer agorot. These helpers are the only place conversions happen. */
 
-const formatter = new Intl.NumberFormat("he-IL", {
-  style: "currency",
-  currency: "ILS",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-});
+const whole = new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", maximumFractionDigits: 0 });
+const cents = new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/** ₪49 for whole shekels, ₪49.90 otherwise. */
 export function formatPrice(agorot: number): string {
-  return formatter.format(agorot / 100);
+  return (agorot % 100 === 0 ? whole : cents).format(agorot / 100);
 }
 
 /** Parses a user-entered shekel amount ("12.90", "12,9", "₪12") into agorot. Returns null if invalid. */
