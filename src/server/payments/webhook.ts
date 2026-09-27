@@ -2,6 +2,7 @@ import "server-only";
 import { db, type Tx } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { decrementStock, InsufficientStockError, releaseOrderStock } from "@/server/inventory/inventory";
+import { sendOrderConfirmation } from "@/server/orders/notifications";
 import { getPaymentProvider } from "./providers";
 import { WebhookVerificationError, type VerifiedWebhookEvent } from "./providers/types";
 
@@ -77,6 +78,7 @@ async function lockOrder(tx: Tx, orderId: string) {
 
 async function onSucceeded(providerId: string, event: VerifiedWebhookEvent, paymentId: string): Promise<WebhookOutcome> {
   let needsRefund: { reason: string } | null = null;
+  let confirmOrderId: string | null = null;
 
   try {
     await db.$transaction(async (tx) => {
@@ -132,6 +134,7 @@ async function onSucceeded(providerId: string, event: VerifiedWebhookEvent, paym
         }
       }
       if (order.cartId) await tx.cart.deleteMany({ where: { id: order.cartId } });
+      confirmOrderId = order.id;
     });
   } catch (e) {
     if (!(e instanceof StockShortage)) throw e;
@@ -158,6 +161,7 @@ async function onSucceeded(providerId: string, event: VerifiedWebhookEvent, paym
   }
 
   if (needsRefund) await autoRefund(paymentId, (needsRefund as { reason: string }).reason);
+  if (confirmOrderId) await sendOrderConfirmation(confirmOrderId);
   return { status: 200, result: "processed" };
 }
 

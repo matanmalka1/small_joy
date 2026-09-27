@@ -6,7 +6,7 @@ import { logger } from "@/lib/logger";
 import { buildCartView, type CartView } from "@/server/cart/cart";
 import { couponErrorMessages } from "@/server/pricing/engine";
 import { getShippingOption, methodServesCity, type ShippingOption } from "@/server/shipping/methods";
-import { getPaymentProvider } from "@/server/payments/providers";
+import { getPaymentProvider, PaymentsNotConfiguredError } from "@/server/payments/providers";
 import type { CheckoutInput } from "@/lib/validation/checkout";
 
 export class CheckoutError extends Error {
@@ -44,6 +44,13 @@ export type CheckoutResult = { orderId: string; accessToken: string; redirectUrl
  * Every price is recomputed here from the database — client values are never trusted.
  */
 export async function checkoutCart(cartId: string, input: CheckoutInput, user: { id: string } | null): Promise<CheckoutResult> {
+  // Fail fast (before creating an order) when no payment provider is available.
+  try {
+    getPaymentProvider();
+  } catch (e) {
+    if (e instanceof PaymentsNotConfiguredError) throw new CheckoutError("התשלום המקוון אינו זמין כרגע. ניתן ליצור קשר עם החנות להשלמת ההזמנה");
+    throw e;
+  }
   const shipping = await resolveShipping(input);
   const view: CartView = await buildCartView(cartId, {
     email: input.email,

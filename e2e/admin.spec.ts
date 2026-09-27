@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { buyAsGuest } from "./helpers";
 
 // Test admin created with: ADMIN_EMAIL=... ADMIN_PASSWORD=... npm run admin:create
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? "admin@example.com";
@@ -32,7 +33,12 @@ test.describe("admin", () => {
     await expect(page).not.toHaveURL(/\/admin/);
   });
 
-  test("create product, manage an order and adjust stock", async ({ page }) => {
+  test("create product, manage an order and adjust stock", async ({ page, browser }) => {
+    // A paid order to manage, bought by a guest in a separate session.
+    const guest = await browser.newContext();
+    const orderNumber = await buyAsGuest(await guest.newPage());
+    await guest.close();
+
     await login(page, ADMIN_EMAIL, ADMIN_PASSWORD);
     await expect(page.getByRole("heading", { name: "לוח בקרה" })).toBeVisible();
 
@@ -55,10 +61,10 @@ test.describe("admin", () => {
     await page.getByRole("button", { name: "עדכון" }).click();
     await expect(page.getByText("המלאי עודכן (+5)")).toBeVisible();
 
-    // Change status of a paid order (created by the purchase spec)
-    await page.goto("/admin/orders?status=PAID");
-    const first = page.locator("tbody tr a").first();
-    await first.click();
+    // Manage the order that was just paid
+    await page.goto(`/admin/orders?q=${orderNumber}`);
+    await page.getByRole("link", { name: orderNumber }).click();
+    await expect(page.getByRole("heading", { name: `הזמנה ${orderNumber}` })).toBeVisible();
     await page.getByLabel("סטטוס חדש").selectOption("PROCESSING");
     await page.getByRole("button", { name: "עדכון סטטוס" }).click();
     await expect(page.getByText("הסטטוס עודכן")).toBeVisible();

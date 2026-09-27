@@ -6,8 +6,8 @@ const optionalText = (max: number) =>
     .string()
     .trim()
     .max(max)
-    .optional()
-    .transform((v) => (v ? v : undefined));
+    .transform((v) => (v ? v : undefined))
+    .optional();
 
 export const addressSchema = z.object({
   city: z.string().trim().min(2, "יש להזין עיר").max(60),
@@ -18,9 +18,9 @@ export const addressSchema = z.object({
   zip: z
     .string()
     .trim()
-    .optional()
     .transform((v) => (v ? v : undefined))
-    .pipe(z.string().regex(/^\d{7}$/, "מיקוד צריך להכיל 7 ספרות").optional()),
+    .pipe(z.string().regex(/^\d{7}$/, "מיקוד צריך להכיל 7 ספרות").optional())
+    .optional(),
   notes: optionalText(300),
 });
 

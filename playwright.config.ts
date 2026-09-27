@@ -22,6 +22,8 @@ export default defineConfig({
     command: process.env.E2E_COMMAND ?? `npm run start -- -p ${port}`,
     url: `http://localhost:${port}`,
     reuseExistingServer: true,
+    // The E2E server uses the payment SANDBOX; it is refused in production otherwise.
+    env: { PAYMENTS_ALLOW_SANDBOX: "true" },
     timeout: 180_000,
   },
 });

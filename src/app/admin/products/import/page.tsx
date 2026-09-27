@@ -19,7 +19,7 @@ const DOCS: Record<string, string> = {
   sale_price: "מחיר מבצע (ריק = ללא)",
   stock: "כמות במלאי",
   low_stock_threshold: "סף התראת מלאי נמוך",
-  image_url: "קישור https לתמונה (לא חובה)",
+  image_url: "כתובת תמונה שכבר הועלתה לאחסון התמונות של החנות (לא חובה)",
 };
 
 export default function ImportPage() {

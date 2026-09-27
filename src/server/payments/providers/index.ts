@@ -26,6 +26,16 @@ export function getPaymentProvider(id?: string): PaymentProvider {
   }
 }
 
+/** Whether online payment can currently be offered at all. */
+export function paymentsAvailable(): boolean {
+  try {
+    getPaymentProvider();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function paymentsAreSandbox(): boolean {
   try {
     return getPaymentProvider().isSandbox;

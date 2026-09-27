@@ -6,7 +6,7 @@ import { getCurrentCart } from "@/server/cart/session";
 import { buildCartView } from "@/server/cart/cart";
 import { listShippingOptions } from "@/server/shipping/methods";
 import { getStoreSettings } from "@/server/settings/store-settings";
-import { paymentsAreSandbox } from "@/server/payments/providers";
+import { paymentsAreSandbox, paymentsAvailable } from "@/server/payments/providers";
 import { CheckoutForm, type CheckoutShippingOption } from "@/components/store/checkout-form";
 import { OrderSummary } from "@/components/store/order-summary";
 import { Alert } from "@/components/ui/alert";
@@ -47,7 +47,11 @@ export default async function CheckoutPage() {
           חלק מהמוצרים אינם זמינים בכמות שנבחרה. <LinkButton href="/cart" variant="ghost" size="sm">לעדכון הסל</LinkButton>
         </Alert>
       )}
-      {options.length === 0 ? (
+      {!paymentsAvailable() ? (
+        <Alert tone="warning" title="התשלום המקוון טרם הופעל">
+          לא ניתן להשלים רכישה באתר כרגע. ניתן ליצור איתנו קשר להשלמת ההזמנה.
+        </Alert>
+      ) : options.length === 0 ? (
         <Alert tone="danger" title="לא ניתן להשלים הזמנה כרגע">לא הוגדרו שיטות אספקה פעילות. אנא צרו קשר עם החנות.</Alert>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">

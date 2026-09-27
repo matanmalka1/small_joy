@@ -3,6 +3,7 @@ import Papa from "papaparse";
 import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 import { parseShekels, toShekelInput } from "@/lib/money";
 import { SLUG_RE } from "@/lib/slug";
 import { optionsToString, parseOptionsString, type VariantOptions } from "@/server/catalog/options";
@@ -112,7 +113,10 @@ function parseRow(raw: Record<string, string>, line: number): ParsedRow | Import
     out.lowStock = n;
   }
   if (d.image_url) {
-    if (!/^https:\/\//.test(d.image_url) && !d.image_url.startsWith("/")) return { line, sku, action: "error", message: "image_url חייב להתחיל ב־https://" };
+    // Images must live on our own media host (CSP + image optimizer allow only it).
+    const media = env().S3_PUBLIC_URL?.replace(/\/$/, "");
+    const allowed = d.image_url.startsWith("/") || (media && d.image_url.startsWith(`${media}/`));
+    if (!allowed) return { line, sku, action: "error", message: `image_url חייב להיות נתיב מקומי או כתובת תחת ${media ?? "S3_PUBLIC_URL"}` };
     out.imageUrl = d.image_url;
   }
   const effectivePrice = out.price;

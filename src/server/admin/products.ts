@@ -80,7 +80,9 @@ export async function saveProduct(input: ProductInput, productId: string | null,
         if (img.id && existingImages.some((e) => e.id === img.id)) {
           await tx.productImage.update({ where: { id: img.id }, data: { sortOrder, alt: img.alt } });
         } else if (img.url.startsWith("/") || /^https:\/\//.test(img.url)) {
-          await tx.productImage.create({ data: { productId: product.id, url: img.url, storageKey: img.storageKey ?? null, alt: img.alt, sortOrder } });
+          // Only keys produced by our uploader may be stored (they are later deleted from storage).
+          const storageKey = img.storageKey && /^products\/[\w/-]+\.webp$/.test(img.storageKey) ? img.storageKey : null;
+          await tx.productImage.create({ data: { productId: product.id, url: img.url, storageKey, alt: img.alt, sortOrder } });
         }
       }
 
